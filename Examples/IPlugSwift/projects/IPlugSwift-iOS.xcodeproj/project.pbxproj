@@ -35,6 +35,7 @@
 		4F3E0F6B20A0BCE300A9C2BE /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4F3E0F6820A0BCAF00A9C2BE /* Images.xcassets */; };
 		4F618A2A256EB0240015B552 /* AUv3Appex.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F618A29256EB0240015B552 /* AUv3Appex.mm */; };
 		4FB2269720A0D3A800614769 /* IPlugSwift-iOS-LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4FB2269620A0D3A800614769 /* IPlugSwift-iOS-LaunchScreen.storyboard */; };
+		4FCACDB62575837400E3D641 /* IPlugFaust.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FCACDB52575837300E3D641 /* IPlugFaust.cpp */; };
 		4FDF6D772267CE540007B686 /* AppViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FDF6D732267CE540007B686 /* AppViewController.mm */; };
 		4FDF6D792267CE540007B686 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4FDF6D742267CE540007B686 /* main.m */; };
 		4FDF6D7B2267CE540007B686 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4FDF6D752267CE540007B686 /* AppDelegate.m */; };
@@ -150,6 +151,9 @@
 		4FA758452186222E00F1BCC3 /* IPlugPaths.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = IPlugPaths.mm; path = ../../../IPlug/IPlugPaths.mm; sourceTree = "<group>"; };
 		4FB2269620A0D3A800614769 /* IPlugSwift-iOS-LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = "IPlugSwift-iOS-LaunchScreen.storyboard"; path = "../resources/IPlugSwift-iOS-LaunchScreen.storyboard"; sourceTree = "<group>"; };
 		4FBBD7F420B6ABE700A37DE2 /* config */ = {isa = PBXFileReference; lastKnownFileType = folder; name = config; path = ../config; sourceTree = "<group>"; };
+		4FCACDB52575837300E3D641 /* IPlugFaust.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = IPlugFaust.cpp; sourceTree = "<group>"; };
+		4FCACDB72575841C00E3D641 /* IPlugSwiftFaust.dsp */ = {isa = PBXFileReference; lastKnownFileType = text; name = IPlugSwiftFaust.dsp; path = ../IPlugSwiftFaust.dsp; sourceTree = "<group>"; };
+		4FCACDB82575846200E3D641 /* FaustCode.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; name = FaustCode.hpp; path = ../FaustCode.hpp; sourceTree = "<group>"; };
 		4FDA600520B5868D00C49ABA /* IPlugSwift-ios.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "IPlugSwift-ios.xcconfig"; path = "../config/IPlugSwift-ios.xcconfig"; sourceTree = "<group>"; };
 		4FDF6D722267CE540007B686 /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		4FDF6D732267CE540007B686 /* AppViewController.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = AppViewController.mm; sourceTree = "<group>"; };
@@ -334,6 +338,7 @@
 		4F977D4920CC9DD800D19F46 /* Faust */ = {
 			isa = PBXGroup;
 			children = (
+				4FCACDB52575837300E3D641 /* IPlugFaust.cpp */,
 				4F977D4A20CC9DD800D19F46 /* IPlugFaust.h */,
 				4F977D4C20CC9DD800D19F46 /* IPlugFaustGen.cpp */,
 				4F977D4D20CC9DD800D19F46 /* IPlugFaust_arch.cpp */,
@@ -427,9 +432,11 @@
 				4FFF108420A1036200D3092F /* config.h */,
 				4FFF108820A1036200D3092F /* IPlugSwift.h */,
 				4FFF108720A1036200D3092F /* IPlugSwift.mm */,
+				4FCACDB82575846200E3D641 /* FaustCode.hpp */,
 				4F618A29256EB0240015B552 /* AUv3Appex.mm */,
 				4F304B832364B43000372A88 /* IPlugSwiftSharedConstants.h */,
 				4F304B822364B43000372A88 /* IPlugSwiftViewController.swift */,
+				4FCACDB72575841C00E3D641 /* IPlugSwiftFaust.dsp */,
 				4F10E7BF20B17EDB00F5B09B /* IPlugSwift-iOS-MainInterface.storyboard */,
 				4F8D8BD82316701900EFA1FB /* README.md */,
 				4F8BF48D20A12D2E0081DF0A /* Resources */,
@@ -631,6 +638,7 @@
 				4F304BA72364BB8D00372A88 /* config.h in Sources */,
 				4F304BA82364BB8D00372A88 /* IPlugSwift.h in Sources */,
 				4F304BA92364BB8D00372A88 /* IPlugSwift.mm in Sources */,
+				4FCACDB62575837400E3D641 /* IPlugFaust.cpp in Sources */,
 				4F304BAA2364BB8D00372A88 /* IPlugSwiftSharedConstants.h in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

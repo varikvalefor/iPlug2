@@ -1,0 +1,1 @@
+faust -cn Faust1 -i -a ../../IPlug/Extras/Faust/IPlugFaust_arch.cpp -o FaustCode.hpp IPlugSwiftFaust.dsp

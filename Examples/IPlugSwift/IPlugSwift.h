@@ -4,6 +4,9 @@
 #include "Oscillator.h"
 #include "Smoothers.h"
 #include "IPlugSwiftSharedConstants.h"
+#include "IPlugFaustGen.h"
+
+#define DSP_FILE ""
 
 using namespace iplug;
 
@@ -17,6 +20,7 @@ public:
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
   void OnParamChange(int paramIdx) override;
   void OnIdle() override;
+  void OnReset() override;
   
 private:
   FastSinOscillator<float> mOsc;
@@ -27,4 +31,5 @@ private:
   float* mActiveBuffer = &mVizBuffer2[0];
   int mCount = 0;
   bool mBufferFull = false;
+  FAUST_BLOCK(Faust1, mFaustProcessor, DSP_FILE, 1, 1);
 };

@@ -6,6 +6,11 @@ IPlugSwift::IPlugSwift(const InstanceInfo& info)
 {
   GetParam(kParamGain)->InitGain("Volume");
   
+  mFaustProcessor.SetMaxChannelCount(MaxNChannels(ERoute::kInput), MaxNChannels(ERoute::kOutput));
+  mFaustProcessor.Init();
+//  mFaustProcessor.CompileCPP();
+//  mFaustProcessor.SetAutoRecompile(true);
+  
   MakePreset("Gain = 0dB", 0.);
   MakePreset("Gain = -10dB", -10.);
   MakePreset("Gain = -20dB", -20.);
@@ -13,27 +18,7 @@ IPlugSwift::IPlugSwift(const InstanceInfo& info)
 
 void IPlugSwift::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
-  const double gain = GetParam(kParamGain)->DBToAmp();
-  
-  for (int s = 0; s < nFrames; s++)
-  {
-    outputs[0][s] = mOsc.Process(mFreqCPS) * mGainSmoother.Process(gain);
-    outputs[1][s] = outputs[0][s]; // copy L to R
-    
-    mCount %= kDataPacketSize;
-    
-    if(mCount == 0)
-    {
-      mCount = 0;
-      mBufferFull = true;
-      if(mActiveBuffer == mVizBuffer1)
-        mActiveBuffer = mVizBuffer2;
-      else
-        mActiveBuffer = mVizBuffer1;
-    }
-
-    mActiveBuffer[mCount++] = outputs[0][s];
-  }
+  mFaustProcessor.ProcessBlock(inputs, outputs, nFrames);
 }
 
 void IPlugSwift::OnIdle()
@@ -53,19 +38,17 @@ void IPlugSwift::OnIdle()
 
 void IPlugSwift::ProcessMidiMsg(const IMidiMsg& msg)
 {
-  auto midi2CPS = [](int pitch, double tune = 440.) {
-    return tune * std::pow(2., (pitch - 69.) / 12.);
-  };
-  
-  switch (msg.StatusMsg())
-  {
-    case IMidiMsg::kNoteOn:
-      mFreqCPS = midi2CPS(msg.NoteNumber());
-      break;
-      
-    default:
-      break;
-  }
+  mFaustProcessor.ProcessMidiMsg(msg);
+}
+
+void IPlugSwift::OnParamChange(int paramIdx)
+{
+  mFaustProcessor.SetParameterValueNormalised(paramIdx, GetParam(paramIdx)->GetNormalized());
+}
+
+void IPlugSwift::OnReset()
+{
+  mFaustProcessor.SetSampleRate(GetSampleRate());
 }
 
 bool IPlugSwift::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
@@ -81,9 +64,4 @@ bool IPlugSwift::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pD
   }
   
   return CocoaEditorDelegate::OnMessage(msgTag, ctrlTag, dataSize, pData);
-}
-
-void IPlugSwift::OnParamChange(int paramIdx)
-{
-  DBGMSG("Param change %i: %f\n", paramIdx, GetParam(paramIdx)->Value());
 }
