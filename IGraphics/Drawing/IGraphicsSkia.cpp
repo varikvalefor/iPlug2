@@ -25,6 +25,7 @@
   //even though this is a .cpp we are in an objc(pp) compilation unit
     #import <Metal/Metal.h>
     #import <QuartzCore/CAMetalLayer.h>
+    #include "include/gpu/mtl/GrMtlBackendContext.h"
   #elif !defined IGRAPHICS_CPU
     #error Define either IGRAPHICS_GL2, IGRAPHICS_GL3, IGRAPHICS_METAL, or IGRAPHICS_CPU for IGRAPHICS_SKIA with OS_MAC
   #endif
@@ -312,7 +313,12 @@ void IGraphicsSkia::OnViewInitialized(void* pContext)
   CAMetalLayer* pMTLLayer = (CAMetalLayer*) pContext;
   id<MTLDevice> device = pMTLLayer.device;
   id<MTLCommandQueue> commandQueue = [device newCommandQueue];
-  mGrContext = GrDirectContext::MakeMetal((void*) device, (void*) commandQueue);
+  
+  GrMtlBackendContext backendContext = {};
+  backendContext.fDevice.retain((__bridge GrMTLHandle) device);
+  backendContext.fQueue.retain((__bridge GrMTLHandle) commandQueue);
+  mGrContext = GrDirectContext::MakeMetal(backendContext);
+  
   mMTLDevice = (void*) device;
   mMTLCommandQueue = (void*) commandQueue;
   mMTLLayer = pContext;

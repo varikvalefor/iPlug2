@@ -47,7 +47,6 @@ if [ "$#" -eq 1 ]; then
   skia_enable_particles = true
   skia_enable_gpu = true
   skia_enable_skparagraph = true
-  skia_enable_sksl_interpreter = true
   cc = "clang"
   cxx = "clang++"
   target_os = "ios"
