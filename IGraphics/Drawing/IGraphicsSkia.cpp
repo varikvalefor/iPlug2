@@ -34,7 +34,10 @@
   #pragma comment(lib, "zlib.lib")
   #pragma comment(lib, "skia.lib")
   #pragma comment(lib, "svg.lib")
+  #pragma comment(lib, "skshaper.lib")
   #pragma comment(lib, "opengl32.lib")
+  #pragma comment(lib, "d3dcompiler")
+  #pragma comment(lib, "d3d12.lib")
 #endif
 
 #if defined IGRAPHICS_GL
@@ -573,7 +576,7 @@ void IGraphicsSkia::DrawBitmap(const IBitmap& bitmap, const IRECT& dest, int src
   if (image->mIsSurface)
     image->mSurface->draw(mCanvas, 0.0, 0.0, &p);
   else
-    mCanvas->drawImage(image->mImage, 0.0, 0.0, &p);
+    mCanvas->drawImage(image->mImage, 0.0, 0.0);
     
   mCanvas->restore();
 }
