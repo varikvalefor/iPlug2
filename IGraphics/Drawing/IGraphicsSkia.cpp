@@ -248,7 +248,7 @@ IGraphicsSkia::IGraphicsSkia(IGEditorDelegate& dlg, int w, int h, int fps, float
 {
   mMainPath.setIsVolatile(true);
   
-  DBGMSG("%s @ %i FPS", GetDrawingAPIStr(), fps);
+  DBGMSG("%s @ %i FPS\n", GetDrawingAPIStr(), fps);
   StaticStorage<Font>::Accessor storage(sFontCache);
   storage.Retain();
 }
@@ -1054,6 +1054,8 @@ const char* IGraphicsSkia::GetDrawingAPIStr()
     return "SKIA | GL2";
 #elif defined IGRAPHICS_GL3
     return "SKIA | GL3";
+#else
+    return "GL not enabled";
 #endif
   }
   else if (GetBackendMode() == EBackendMode::Metal)
@@ -1064,4 +1066,6 @@ const char* IGraphicsSkia::GetDrawingAPIStr()
   {
     return "SKIA | Direct3D";
   }
+  
+  return "";
 }
