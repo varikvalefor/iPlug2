@@ -640,30 +640,27 @@ LRESULT CALLBACK IGraphicsWin::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARA
           addDrawRect(rects, r);
         }
 
-#if defined IGRAPHICS_GL //|| IGRAPHICS_D2D
+#if defined IGRAPHICS_GL
         PAINTSTRUCT ps;
-        BeginPaint(hWnd, &ps);
-#endif
-
-#ifdef IGRAPHICS_GL
-        pGraphics->ActivateGLContext();
+        if (pGraphics->GetBackendMode() == EBackendMode::OpenGL)
+        {
+          BeginPaint(hWnd, &ps);
+          pGraphics->ActivateGLContext();
+        }
 #endif
 
         pGraphics->Draw(rects);
 
-        #ifdef IGRAPHICS_GL
-        SwapBuffers((HDC) pGraphics->GetPlatformContext());
-        pGraphics->DeactivateGLContext();
-        #endif
-
-#if defined IGRAPHICS_GL || IGRAPHICS_D2D
-        EndPaint(hWnd, &ps);
+#if defined IGRAPHICS_GL
+        if (pGraphics->GetBackendMode() == EBackendMode::OpenGL)
+        {
+          SwapBuffers((HDC) pGraphics->GetPlatformContext());
+          pGraphics->DeactivateGLContext();
+          EndPaint(hWnd, &ps);
+        }
 #endif
       }
 
-      // For the D2D if we don't call endpaint, then you really need to call ValidateRect otherwise
-      // we are just going to get another WM_PAINT to handle.  Bad!  It also exibits the odd property
-      // that windows will be popped under the window.
       ValidateRect(hWnd, 0);
 
       DeleteObject(region);
@@ -910,14 +907,12 @@ void IGraphicsWin::PlatformResize(bool parentHasResized)
   }
 }
 
-#ifdef IGRAPHICS_GL
 void IGraphicsWin::DrawResize()
 {
   ActivateGLContext();
   IGRAPHICS_DRAW_CLASS::DrawResize();
   DeactivateGLContext();
 }
-#endif
 
 void IGraphicsWin::HideMouseCursor(bool hide, bool lock)
 {
@@ -1012,9 +1007,11 @@ void IGraphicsWin::GetMouseLocation(float& x, float&y) const
   y = p.y / scale;
 }
 
-#ifdef IGRAPHICS_GL
 void IGraphicsWin::CreateGLContext()
 {
+  if (GetBackendMode() == EBackendMode::Software) return;
+
+#ifdef IGRAPHICS_GL
   PIXELFORMATDESCRIPTOR pfd =
   {
     sizeof(PIXELFORMATDESCRIPTOR),
@@ -1070,28 +1067,40 @@ void IGraphicsWin::CreateGLContext()
   glGetError();
 
   ReleaseDC(mPlugWnd, dc);
+#endif
 }
 
 void IGraphicsWin::DestroyGLContext()
 {
+  if (GetBackendMode() == EBackendMode::Software) return;
+
+#ifdef IGRAPHICS_GL
   wglMakeCurrent(NULL, NULL);
   wglDeleteContext(mHGLRC);
+#endif
 }
 
 void IGraphicsWin::ActivateGLContext()
 {
+  if (GetBackendMode() == EBackendMode::Software) return;
+
+#ifdef IGRAPHICS_GL
   mStartHDC = wglGetCurrentDC();
   mStartHGLRC = wglGetCurrentContext();
   HDC dc = GetDC(mPlugWnd);
   wglMakeCurrent(dc, mHGLRC);
+#endif
 }
 
 void IGraphicsWin::DeactivateGLContext()
 {
+  if (GetBackendMode() == EBackendMode::Software) return;
+
+#ifdef IGRAPHICS_GL
   ReleaseDC(mPlugWnd, (HDC) GetPlatformContext());
   wglMakeCurrent(mStartHDC, mStartHGLRC); // return current ctxt to start
-}
 #endif
+}
 
 EMsgBoxResult IGraphicsWin::ShowMessageBox(const char* text, const char* caption, EMsgBoxType type, IMsgBoxCompletionHanderFunc completionHandler)
 {
@@ -1135,10 +1144,7 @@ void* IGraphicsWin::OpenWindow(void* pParent)
   SetPlatformContext(dc);
   ReleaseDC(mPlugWnd, dc);
 
-#ifdef IGRAPHICS_GL
   CreateGLContext();
-#endif
-
   OnViewInitialized((void*) dc);
 
   SetScreenScale(screenScale); // resizes draw context
@@ -1268,16 +1274,10 @@ void IGraphicsWin::CloseWindow()
     else
       KillTimer(mPlugWnd, IPLUG_TIMER_ID);
 
-#ifdef IGRAPHICS_GL
     ActivateGLContext();
-#endif
-
     OnViewDestroyed();
-
-#ifdef IGRAPHICS_GL
     DeactivateGLContext();
     DestroyGLContext();
-#endif
 
     SetPlatformContext(nullptr);
 

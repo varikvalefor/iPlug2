@@ -153,7 +153,7 @@ private:
   WDL_TypedBuf<uint8_t> mSurfaceMemory;
 #endif
   
-#ifndef IGRAPHICS_CPU
+#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
   sk_sp<GrDirectContext> mGrContext;
   sk_sp<SkSurface> mScreenSurface;
 #endif

@@ -36,7 +36,7 @@
   #pragma comment(lib, "svg.lib")
   #pragma comment(lib, "skshaper.lib")
   #pragma comment(lib, "opengl32.lib")
-  #pragma comment(lib, "d3dcompiler")
+  #pragma comment(lib, "d3dcompiler.lib")
   #pragma comment(lib, "d3d12.lib")
 #endif
 
@@ -247,13 +247,7 @@ IGraphicsSkia::IGraphicsSkia(IGEditorDelegate& dlg, int w, int h, int fps, float
 {
   mMainPath.setIsVolatile(true);
   
-#if defined IGRAPHICS_CPU
-  DBGMSG("IGraphics Skia CPU @ %i FPS\n", fps);
-#elif defined IGRAPHICS_METAL
-  DBGMSG("IGraphics Skia METAL @ %i FPS\n", fps);
-#elif defined IGRAPHICS_GL
-  DBGMSG("IGraphics Skia GL @ %i FPS\n", fps);
-#endif
+  DBGMSG(GetDrawingAPIStr());
   StaticStorage<Font>::Accessor storage(sFontCache);
   storage.Retain();
 }
@@ -352,15 +346,20 @@ void IGraphicsSkia::DrawResize()
   auto h = static_cast<int>(std::ceil(static_cast<float>(WindowHeight()) * GetScreenScale()));
   
 #if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-  if (mGrContext.get())
+  if (GetBackendMode() > EBackendMode::Software)
   {
-    SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
-    mSurface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
+    if (mGrContext.get())
+    {
+      SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
+      mSurface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
+    }
   }
-#else
-  #ifdef OS_WIN
+#endif
+  if (GetBackendMode() == EBackendMode::Software)
+  {
+#if defined OS_WIN && defined IGRAPHICS_CPU
     mSurface.reset();
-   
+
     const size_t bmpSize = sizeof(BITMAPINFOHEADER) + (w * h * sizeof(uint32_t));
     mSurfaceMemory.Resize(bmpSize);
     BITMAPINFO* bmpInfo = reinterpret_cast<BITMAPINFO*>(mSurfaceMemory.Get());
@@ -375,10 +374,11 @@ void IGraphicsSkia::DrawResize()
 
     SkImageInfo info = SkImageInfo::Make(w, h, kN32_SkColorType, kPremul_SkAlphaType, nullptr);
     mSurface = SkSurface::MakeRasterDirect(info, pixels, sizeof(uint32_t) * w);
-  #else
+#else
     mSurface = SkSurface::MakeRasterN32Premul(w, h);
-  #endif
 #endif
+  }
+
   if (mSurface)
   {
     mCanvas = mSurface->getCanvas();
@@ -388,49 +388,52 @@ void IGraphicsSkia::DrawResize()
 
 void IGraphicsSkia::BeginFrame()
 {
-#if defined IGRAPHICS_GL
-  if (mGrContext.get())
+  if (GetBackendMode() > EBackendMode::Software)
   {
-    int width = WindowWidth() * GetScreenScale();
-    int height = WindowHeight() * GetScreenScale();
-    
-    // Bind to the current main framebuffer
-    int fbo = 0, samples = 0, stencilBits = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
-    glGetIntegerv(GL_SAMPLES, &samples);
-#ifdef IGRAPHICS_GL3
-    glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_STENCIL, GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, &stencilBits);
-#else
-    glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
-#endif
-    
-    GrGLFramebufferInfo fbinfo;
-    fbinfo.fFBOID = fbo;
-    fbinfo.fFormat = 0x8058;
+#if defined IGRAPHICS_GL
+    if (mGrContext.get())
+    {
+      int width = WindowWidth() * GetScreenScale();
+      int height = WindowHeight() * GetScreenScale();
 
-    GrBackendRenderTarget backendRT(width, height, samples, stencilBits, fbinfo);
-    
-    mScreenSurface = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, nullptr);
-    assert(mScreenSurface);
-  }
+      // Bind to the current main framebuffer
+      int fbo = 0, samples = 0, stencilBits = 0;
+      glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
+      glGetIntegerv(GL_SAMPLES, &samples);
+#ifdef IGRAPHICS_GL3
+      glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER, GL_STENCIL, GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, &stencilBits);
+#else
+      glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
+#endif
+
+      GrGLFramebufferInfo fbinfo;
+      fbinfo.fFBOID = fbo;
+      fbinfo.fFormat = 0x8058;
+
+      GrBackendRenderTarget backendRT(width, height, samples, stencilBits, fbinfo);
+
+      mScreenSurface = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, nullptr);
+      assert(mScreenSurface);
+    }
 #elif defined IGRAPHICS_METAL
   if (mGrContext.get())
   {
     int width = WindowWidth() * GetScreenScale();
     int height = WindowHeight() * GetScreenScale();
-    
-    id<CAMetalDrawable> drawable = [(CAMetalLayer*) mMTLLayer nextDrawable];
-    
+
+    id<CAMetalDrawable> drawable = [(CAMetalLayer*)mMTLLayer nextDrawable];
+
     GrMtlTextureInfo fbInfo;
     fbInfo.fTexture.retain((const void*)(drawable.texture));
     GrBackendRenderTarget backendRT(width, height, 1 /* sample count/MSAA */, fbInfo);
-    
+
     mScreenSurface = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kBGRA_8888_SkColorType, nullptr, nullptr);
-    
-    mMTLDrawable = (void*) drawable;
+
+    mMTLDrawable = (void*)drawable;
     assert(mScreenSurface);
   }
 #endif
+  }
 
   IGraphics::BeginFrame();
 }
@@ -505,7 +508,9 @@ void IGraphicsSkia::DrawImGui(SkSurface* surface)
 
 void IGraphicsSkia::EndFrame()
 {
-#ifdef IGRAPHICS_CPU
+#if defined IGRAPHICS_CPU
+  if (GetBackendMode() == EBackendMode::Software)
+  {
   #if defined OS_MAC || defined OS_IOS
     SkPixmap pixmap;
     mSurface->peekPixels(&pixmap);
@@ -529,26 +534,35 @@ void IGraphicsSkia::EndFrame()
   #else
     #error NOT IMPLEMENTED
   #endif
-#else // GPU
-  mSurface->draw(mScreenSurface->getCanvas(), 0.0, 0.0, nullptr);
-  
-  #if defined IGRAPHICS_IMGUI && !IGRAPHICS_CPU
-  if(mImGuiRenderer)
-  {
-    mImGuiRenderer->NewFrame();
-    DrawImGui(mScreenSurface.get());
   }
+#endif
+
+#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
+  if (GetBackendMode() > EBackendMode::Software)
+  {
+    mSurface->draw(mScreenSurface->getCanvas(), 0.0, 0.0, nullptr);
+
+    #if defined IGRAPHICS_IMGUI
+    if(mImGuiRenderer)
+    {
+     mImGuiRenderer->NewFrame();
+     DrawImGui(mScreenSurface.get());
+    }
+    #endif
+
+    mScreenSurface->getCanvas()->flush();
+
+  #if defined IGRAPHICS_METAL
+    if (GetBackendMode() == EBackendMode::Metal)
+    {
+      id<MTLCommandBuffer> commandBuffer = [(id<MTLCommandQueue>) mMTLCommandQueue commandBuffer];
+      commandBuffer.label = @"Present";
+
+      [commandBuffer presentDrawable : (id<CAMetalDrawable>) mMTLDrawable] ;
+      [commandBuffer commit];
+    }
   #endif
-  
-  mScreenSurface->getCanvas()->flush();
-  
-  #ifdef IGRAPHICS_METAL
-    id<MTLCommandBuffer> commandBuffer = [(id<MTLCommandQueue>) mMTLCommandQueue commandBuffer];
-    commandBuffer.label = @"Present";
-  
-    [commandBuffer presentDrawable:(id<CAMetalDrawable>) mMTLDrawable];
-    [commandBuffer commit];
-  #endif
+  }
 #endif
 }
 
@@ -912,19 +926,22 @@ APIBitmap* IGraphicsSkia::CreateAPIBitmap(int width, int height, int scale, doub
 {
   sk_sp<SkSurface> surface;
   
-  #ifndef IGRAPHICS_CPU
-  SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
-  if (cacheable)
+  if (GetBackendMode() == EBackendMode::Software)
   {
-    surface = SkSurface::MakeRasterN32Premul(width, height);
+    SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
+    if (cacheable)
+    {
+      surface = SkSurface::MakeRasterN32Premul(width, height);
+    }
+    else
+    {
+      surface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
+    }
   }
   else
   {
-    surface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
+    surface = SkSurface::MakeRasterN32Premul(width, height);
   }
-  #else
-  surface = SkSurface::MakeRasterN32Premul(width, height);
-  #endif
 
   surface->getCanvas()->save();
 
@@ -1013,13 +1030,24 @@ void IGraphicsSkia::DrawFastDropShadow(const IRECT& innerBounds, const IRECT& ou
 
 const char* IGraphicsSkia::GetDrawingAPIStr()
 {
-#ifdef IGRAPHICS_CPU
-  return "SKIA | CPU";
-#elif defined IGRAPHICS_GL2
-  return "SKIA | GL2";
+  if (GetBackendMode() == EBackendMode::Software)
+  {
+    return "SKIA | CPU";
+  }
+  else if (GetBackendMode() == EBackendMode::OpenGL)
+  {
+#if defined IGRAPHICS_GL2
+    return "SKIA | GL2";
 #elif defined IGRAPHICS_GL3
-  return "SKIA | GL3";
-#elif defined IGRAPHICS_METAL
-  return "SKIA | Metal";
+    return "SKIA | GL3";
 #endif
+  }
+  else if (GetBackendMode() == EBackendMode::Metal)
+  {
+    return "SKIA | Metal";
+  }
+  else if (GetBackendMode() == EBackendMode::Direct3D)
+  {
+    return "SKIA | Direct3D";
+  }
 }
