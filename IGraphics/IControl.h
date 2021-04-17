@@ -1696,7 +1696,8 @@ public:
   void OnInit() override;
   void OnMouseDown(float x, float y, const IMouseMod& mod) override;
   void OnMouseUp(float x, float y, const IMouseMod& mod) override;
-  
+
+  void SetValueByIdx(int idx) { SetValue(double(idx) / double(mNumStates - 1)); }
   int GetSelectedIdx() const { return int(0.5 + GetValue() * (double) (mNumStates - 1)); }
   
   void SetStateDisabled(int stateIdx, bool disabled);

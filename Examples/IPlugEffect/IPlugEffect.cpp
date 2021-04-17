@@ -16,9 +16,21 @@ IPlugEffect::IPlugEffect(const InstanceInfo& info)
     pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
     pGraphics->AttachPanelBackground(COLOR_GRAY);
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
+
+    pGraphics->EnableMouseOver(true);
+
     const IRECT b = pGraphics->GetBounds();
-    pGraphics->AttachControl(new ITextControl(b.GetMidVPadded(50), "Hello iPlug 2!", IText(50)));
-    pGraphics->AttachControl(new IVKnobControl(b.GetCentredInside(100).GetVShifted(-100), kGain));
+    pGraphics->ShowFPSDisplay(true);
+    //pGraphics->AttachControl(new ITextControl(b.GetMidVPadded(50), "Hello iPlug 2!", IText(50)));
+    pGraphics->AttachControl(new IVKnobControl(b.GetFromBLHC(100, 100), kGain));
+    IVTabSwitchControl* pTabs;
+    pGraphics->AttachControl(pTabs = new IVTabSwitchControl(b.GetCentredInside(450, 50), -1, { "CPU", "OpenGL", "Metal", "Direct3D" }, "Graphics Backend", DEFAULT_STYLE.WithValueText({ 36 })))
+      ->SetAnimationEndActionFunction([](IControl* pCaller) {
+      pCaller->GetDelegate()->SetBackendMode(static_cast<EBackendMode>(pCaller->As<IVTabSwitchControl>()->GetSelectedIdx()));
+        })
+      ->As<IVTabSwitchControl>()->SetValueByIdx(int(GetBackendMode()));
+
+        pTabs->SetStateDisabled(2, true);
   };
 #endif
 }
