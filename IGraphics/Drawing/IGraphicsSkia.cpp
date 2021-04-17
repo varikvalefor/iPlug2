@@ -21,14 +21,15 @@
     #include <OpenGL/gl.h>
   #elif defined IGRAPHICS_GL3
     #include <OpenGL/gl3.h>
-  #elif defined IGRAPHICS_METAL
-  //even though this is a .cpp we are in an objc(pp) compilation unit
+  #endif
+
+  #if defined IGRAPHICS_METAL
+    //even though this is a .cpp we are in an objc(pp) compilation unit
     #import <Metal/Metal.h>
     #import <QuartzCore/CAMetalLayer.h>
     #include "include/gpu/mtl/GrMtlBackendContext.h"
-  #elif !defined IGRAPHICS_CPU
-    #error Define either IGRAPHICS_GL2, IGRAPHICS_GL3, IGRAPHICS_METAL, or IGRAPHICS_CPU for IGRAPHICS_SKIA with OS_MAC
   #endif
+
 #elif defined OS_WIN
   #pragma comment(lib, "libpng.lib")
   #pragma comment(lib, "zlib.lib")
@@ -247,7 +248,7 @@ IGraphicsSkia::IGraphicsSkia(IGEditorDelegate& dlg, int w, int h, int fps, float
 {
   mMainPath.setIsVolatile(true);
   
-  DBGMSG(GetDrawingAPIStr());
+  DBGMSG("%s @ %i FPS", GetDrawingAPIStr(), fps);
   StaticStorage<Font>::Accessor storage(sFontCache);
   storage.Retain();
 }
@@ -304,21 +305,29 @@ APIBitmap* IGraphicsSkia::LoadAPIBitmap(const char* name, const void* pData, int
 void IGraphicsSkia::OnViewInitialized(void* pContext)
 {
 #if defined IGRAPHICS_GL
-  auto glInterface = GrGLMakeNativeInterface();
-  mGrContext = GrDirectContext::MakeGL(glInterface);
-#elif defined IGRAPHICS_METAL
-  CAMetalLayer* pMTLLayer = (CAMetalLayer*) pContext;
-  id<MTLDevice> device = pMTLLayer.device;
-  id<MTLCommandQueue> commandQueue = [device newCommandQueue];
+  if (GetBackendMode() == EBackendMode::OpenGL)
+  {
+    auto glInterface = GrGLMakeNativeInterface();
+    mGrContext = GrDirectContext::MakeGL(glInterface);
+  }
+#endif
   
-  GrMtlBackendContext backendContext = {};
-  backendContext.fDevice.retain((__bridge GrMTLHandle) device);
-  backendContext.fQueue.retain((__bridge GrMTLHandle) commandQueue);
-  mGrContext = GrDirectContext::MakeMetal(backendContext);
-  
-  mMTLDevice = (void*) device;
-  mMTLCommandQueue = (void*) commandQueue;
-  mMTLLayer = pContext;
+#if defined IGRAPHICS_METAL
+  if (GetBackendMode() == EBackendMode::Metal)
+  {
+    CAMetalLayer* pMTLLayer = (CAMetalLayer*) pContext;
+    id<MTLDevice> device = pMTLLayer.device;
+    id<MTLCommandQueue> commandQueue = [device newCommandQueue];
+    
+    GrMtlBackendContext backendContext = {};
+    backendContext.fDevice.retain((__bridge GrMTLHandle) device);
+    backendContext.fQueue.retain((__bridge GrMTLHandle) commandQueue);
+    mGrContext = GrDirectContext::MakeMetal(backendContext);
+    
+    mMTLDevice = (void*) device;
+    mMTLCommandQueue = (void*) commandQueue;
+    mMTLLayer = pContext;
+  }
 #endif
 
   DrawResize();
@@ -332,11 +341,16 @@ void IGraphicsSkia::OnViewDestroyed()
   mSurface = nullptr;
   mScreenSurface = nullptr;
   mGrContext = nullptr;
-#elif defined IGRAPHICS_METAL
-  [(id<MTLCommandQueue>) mMTLCommandQueue release];
-  mMTLCommandQueue = nullptr;
-  mMTLLayer = nullptr;
-  mMTLDevice = nullptr;
+#endif
+
+#if defined IGRAPHICS_METAL
+  if (GetBackendMode() > EBackendMode::Metal)
+  {
+    [(id<MTLCommandQueue>) mMTLCommandQueue release];
+    mMTLCommandQueue = nullptr;
+    mMTLLayer = nullptr;
+    mMTLDevice = nullptr;
+  }
 #endif
 }
 
