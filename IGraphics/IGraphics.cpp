@@ -50,6 +50,7 @@ IGraphics::IGraphics(IGEditorDelegate& dlg, int w, int h, int fps, float scale)
 , mDrawScale(scale)
 , mMinScale(scale / 2)
 , mMaxScale(scale * 2)
+, mBackendMode(dlg.GetBackendMode())
 {
   mFPS = (fps > 0 ? fps : DEFAULT_FPS);
     
