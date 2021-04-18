@@ -64,7 +64,7 @@ void IGEditorDelegate::CloseWindow()
 
 void IGEditorDelegate::SetBackendMode(EBackendMode mode)
 {
-  if (mode != mBackendMode)
+  if (mode != mBackendMode && BackendModeIsValid(mode))
   {
     mBackendMode = mode;
     mDeferredFunc = [&]() {
