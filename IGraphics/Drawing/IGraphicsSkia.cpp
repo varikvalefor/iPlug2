@@ -36,9 +36,36 @@
   #pragma comment(lib, "skia.lib")
   #pragma comment(lib, "svg.lib")
   #pragma comment(lib, "skshaper.lib")
+
+//#if defined IGRAPHICS_GL
   #pragma comment(lib, "opengl32.lib")
+//#endif
+
+#if defined IGRAPHICS_D3D
   #pragma comment(lib, "d3dcompiler.lib")
   #pragma comment(lib, "d3d12.lib")
+  #pragma comment(lib, "dxgi.lib")
+
+  #include "include/gpu/d3d/GrD3DBackendContext.h"
+
+  #include <d3d12sdklayers.h>
+  #include <d3d12.h>
+  #include <dxgi1_4.h>
+  #include <wrl/client.h>
+
+  #define GR_D3D_CALL_ERRCHECK(X)                                       \
+      do {                                                              \
+         HRESULT result = X;                                            \
+         SkASSERT(SUCCEEDED(result));                                   \
+         if (!SUCCEEDED(result)) {                                      \
+             SkDebugf("Failed Direct3D call. Error: 0x%08x\n", result); \
+         }                                                              \
+      } while(false)
+
+  using namespace Microsoft::WRL;
+
+#endif
+
 #endif
 
 #if defined IGRAPHICS_GL
@@ -302,6 +329,75 @@ APIBitmap* IGraphicsSkia::LoadAPIBitmap(const char* name, const void* pData, int
   return new Bitmap(pData, dataSize, scale);
 }
 
+#if defined IGRAPHICS_D3D
+void get_hardware_adapter(IDXGIFactory4* pFactory, IDXGIAdapter1** ppAdapter) {
+  *ppAdapter = nullptr;
+  for (UINT adapterIndex = 0; ; ++adapterIndex) {
+    IDXGIAdapter1* pAdapter = nullptr;
+    if (DXGI_ERROR_NOT_FOUND == pFactory->EnumAdapters1(adapterIndex, &pAdapter)) {
+      // No more adapters to enumerate.
+      break;
+    }
+
+    // Check to see if the adapter supports Direct3D 12, but don't create the
+    // actual device yet.
+    if (SUCCEEDED(D3D12CreateDevice(pAdapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device),
+      nullptr))) {
+      *ppAdapter = pAdapter;
+      return;
+    }
+    pAdapter->Release();
+  }
+}
+
+bool CreateD3DBackendContext(GrD3DBackendContext* ctx, bool isProtected = false)
+{
+#if defined(SK_ENABLE_D3D_DEBUG_LAYER)
+  // Enable the D3D12 debug layer.
+  {
+    gr_cp<ID3D12Debug> debugController;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+    {
+      debugController->EnableDebugLayer();
+    }
+  }
+#endif
+  // Create the device
+  gr_cp<IDXGIFactory4> factory;
+  if (!SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+    return false;
+  }
+
+  gr_cp<IDXGIAdapter1> hardwareAdapter;
+  get_hardware_adapter(factory.get(), &hardwareAdapter);
+
+  gr_cp<ID3D12Device> device;
+  if (!SUCCEEDED(D3D12CreateDevice(hardwareAdapter.get(),
+    D3D_FEATURE_LEVEL_11_0,
+    IID_PPV_ARGS(&device)))) {
+    return false;
+  }
+
+  // Create the command queue
+  gr_cp<ID3D12CommandQueue> queue;
+  D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+  queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+  queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+  if (!SUCCEEDED(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)))) {
+    return false;
+  }
+
+  ctx->fAdapter = hardwareAdapter;
+  ctx->fDevice = device;
+  ctx->fQueue = queue;
+  // TODO: set up protected memory
+  ctx->fProtectedContext = /*isProtected ? GrProtected::kYes :*/ GrProtected::kNo;
+
+  return true;
+}
+#endif //IGRAPHICS_D3D
+
 void IGraphicsSkia::OnViewInitialized(void* pContext)
 {
 #if defined IGRAPHICS_GL
@@ -330,6 +426,60 @@ void IGraphicsSkia::OnViewInitialized(void* pContext)
   }
 #endif
 
+#if defined IGRAPHICS_D3D
+  if (GetBackendMode() == EBackendMode::Direct3D)
+  {
+    GrD3DBackendContext backendContext;
+    CreateD3DBackendContext(&backendContext);
+    fDevice = backendContext.fDevice;
+    fQueue = backendContext.fQueue;
+
+    mGrContext = GrDirectContext::MakeDirect3D(backendContext);
+
+
+    // Make the swapchain
+
+    UINT dxgiFactoryFlags = 0;
+    SkDEBUGCODE(dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;)
+
+    gr_cp<IDXGIFactory4> factory;
+    GR_D3D_CALL_ERRCHECK(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)));
+
+    auto w = static_cast<int>(std::ceil(static_cast<float>(WindowWidth()) * GetScreenScale()));
+    auto h = static_cast<int>(std::ceil(static_cast<float>(WindowHeight()) * GetScreenScale()));
+    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+    swapChainDesc.BufferCount = kNumFrames;
+    swapChainDesc.Width = w;
+    swapChainDesc.Height = h;
+    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapChainDesc.SampleDesc.Count = 1;
+
+    HWND hWnd = (HWND) GetWindow();
+    gr_cp<IDXGISwapChain1> swapChain;
+    GR_D3D_CALL_ERRCHECK(factory->CreateSwapChainForHwnd(fQueue.get(), hWnd, &swapChainDesc, nullptr, nullptr, &swapChain));
+
+    // We don't support fullscreen transitions.
+    GR_D3D_CALL_ERRCHECK(factory->MakeWindowAssociation(hWnd, DXGI_MWA_NO_ALT_ENTER));
+
+    GR_D3D_CALL_ERRCHECK(swapChain->QueryInterface(IID_PPV_ARGS(&fSwapChain)));
+
+    fBufferIndex = fSwapChain->GetCurrentBackBufferIndex();
+
+    fSampleCount = 1;
+
+    for (int i = 0; i < kNumFrames; ++i) {
+      fFenceValues[i] = 10000;   // use a high value to make it easier to track these in PIX
+    }
+    GR_D3D_CALL_ERRCHECK(fDevice->CreateFence(fFenceValues[fBufferIndex], D3D12_FENCE_FLAG_NONE,
+      IID_PPV_ARGS(&fFence)));
+
+    fFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    SkASSERT(fFenceEvent);
+  }
+#endif
+
   DrawResize();
 }
 
@@ -344,12 +494,29 @@ void IGraphicsSkia::OnViewDestroyed()
 #endif
 
 #if defined IGRAPHICS_METAL
-  if (GetBackendMode() > EBackendMode::Metal)
+  if (GetBackendMode() == EBackendMode::Metal)
   {
     [(id<MTLCommandQueue>) mMTLCommandQueue release];
     mMTLCommandQueue = nullptr;
     mMTLLayer = nullptr;
     mMTLDevice = nullptr;
+  }
+#endif
+
+#if defined IGRAPHICS_D3D
+  if (GetBackendMode() == EBackendMode::Direct3D)
+  {
+    CloseHandle(fFenceEvent);
+    fFence.reset(nullptr);
+
+    for (int i = 0; i < kNumFrames; ++i) {
+      fSurfaces[i].reset(nullptr);
+      fBuffers[i].reset(nullptr);
+    }
+
+    fSwapChain.reset(nullptr);
+    fQueue.reset(nullptr);
+    fDevice.reset(nullptr);
   }
 #endif
 }
@@ -369,6 +536,61 @@ void IGraphicsSkia::DrawResize()
     }
   }
 #endif
+
+#if defined IGRAPHICS_D3D
+  if (GetBackendMode() == EBackendMode::Direct3D)
+  {
+    // Clean up any outstanding resources in command lists
+    mGrContext->flush({});
+    mGrContext->submit(true);
+
+    // release the previous surface and backbuffer resources
+    for (int i = 0; i < kNumFrames; ++i) {
+      // Let present complete
+      if (fFence->GetCompletedValue() < fFenceValues[i]) {
+        GR_D3D_CALL_ERRCHECK(fFence->SetEventOnCompletion(fFenceValues[i], fFenceEvent));
+        WaitForSingleObjectEx(fFenceEvent, INFINITE, FALSE);
+      }
+      fSurfaces[i].reset(nullptr);
+      fBuffers[i].reset(nullptr);
+    }
+
+    GR_D3D_CALL_ERRCHECK(fSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
+
+    // set up base resource info
+    GrD3DTextureResourceInfo info(nullptr,
+      nullptr,
+      D3D12_RESOURCE_STATE_PRESENT,
+      DXGI_FORMAT_R8G8B8A8_UNORM,
+      1,
+      1,
+      0);
+    for (int i = 0; i < kNumFrames; ++i)
+    {
+      GR_D3D_CALL_ERRCHECK(fSwapChain->GetBuffer(i, IID_PPV_ARGS(&fBuffers[i])));
+
+      SkASSERT(fBuffers[i]->GetDesc().Width == (UINT64)w && fBuffers[i]->GetDesc().Height == (UINT64)h);
+
+      SkSurfaceProps props{ 0, kRGB_H_SkPixelGeometry };
+
+      info.fResource = fBuffers[i];
+      if (fSampleCount > 1) {
+        GrBackendTexture backendTexture(w, h, info);
+        fSurfaces[i] = SkSurface::MakeFromBackendTexture(
+          mGrContext.get(), backendTexture, kTopLeft_GrSurfaceOrigin, fSampleCount,
+          kRGBA_8888_SkColorType, nullptr, &props);
+      }
+      else {
+        GrBackendRenderTarget backendRT(w, h, info);
+        fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(
+          mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
+          nullptr, &props);
+      }
+    }
+  }
+
+#endif
+
   if (GetBackendMode() == EBackendMode::Software)
   {
 #if defined OS_WIN && defined IGRAPHICS_CPU
@@ -402,9 +624,9 @@ void IGraphicsSkia::DrawResize()
 
 void IGraphicsSkia::BeginFrame()
 {
-  if (GetBackendMode() > EBackendMode::Software)
-  {
 #if defined IGRAPHICS_GL
+  if (GetBackendMode() == EBackendMode::OpenGL)
+  {
     if (mGrContext.get())
     {
       int width = WindowWidth() * GetScreenScale();
@@ -429,25 +651,30 @@ void IGraphicsSkia::BeginFrame()
       mScreenSurface = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, nullptr);
       assert(mScreenSurface);
     }
-#elif defined IGRAPHICS_METAL
-  if (mGrContext.get())
+  }
+#endif //IGRAPHICS_GL
+
+#if defined IGRAPHICS_METAL
+  if (GetBackendMode() == EBackendMode::Metal)
   {
-    int width = WindowWidth() * GetScreenScale();
-    int height = WindowHeight() * GetScreenScale();
+    if (mGrContext.get())
+    {
+      int width = WindowWidth() * GetScreenScale();
+      int height = WindowHeight() * GetScreenScale();
 
-    id<CAMetalDrawable> drawable = [(CAMetalLayer*)mMTLLayer nextDrawable];
+      id<CAMetalDrawable> drawable = [(CAMetalLayer*)mMTLLayer nextDrawable];
 
-    GrMtlTextureInfo fbInfo;
-    fbInfo.fTexture.retain((const void*)(drawable.texture));
-    GrBackendRenderTarget backendRT(width, height, 1 /* sample count/MSAA */, fbInfo);
+      GrMtlTextureInfo fbInfo;
+      fbInfo.fTexture.retain((const void*)(drawable.texture));
+      GrBackendRenderTarget backendRT(width, height, 1 /* sample count/MSAA */, fbInfo);
 
-    mScreenSurface = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kBGRA_8888_SkColorType, nullptr, nullptr);
+      mScreenSurface = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kBGRA_8888_SkColorType, nullptr, nullptr);
 
-    mMTLDrawable = (void*)drawable;
-    assert(mScreenSurface);
+      mMTLDrawable = (void*)drawable;
+      assert(mScreenSurface);
+    }
   }
 #endif
-  }
 
   IGraphics::BeginFrame();
 }
@@ -552,30 +779,66 @@ void IGraphicsSkia::EndFrame()
 #endif
 
 #if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-  if (GetBackendMode() > EBackendMode::Software)
+  if (GetBackendMode() == EBackendMode::OpenGL || GetBackendMode() == EBackendMode::Metal && mScreenSurface)
   {
     mSurface->draw(mScreenSurface->getCanvas(), 0.0, 0.0, nullptr);
 
     #if defined IGRAPHICS_IMGUI
-    if(mImGuiRenderer)
+    if (mImGuiRenderer)
     {
-     mImGuiRenderer->NewFrame();
-     DrawImGui(mScreenSurface.get());
+      mImGuiRenderer->NewFrame();
+      DrawImGui(mScreenSurface.get());
     }
     #endif
 
     mScreenSurface->getCanvas()->flush();
 
-  #if defined IGRAPHICS_METAL
+    #if defined IGRAPHICS_METAL
     if (GetBackendMode() == EBackendMode::Metal)
     {
       id<MTLCommandBuffer> commandBuffer = [(id<MTLCommandQueue>) mMTLCommandQueue commandBuffer];
       commandBuffer.label = @"Present";
 
-      [commandBuffer presentDrawable : (id<CAMetalDrawable>) mMTLDrawable] ;
+      [commandBuffer presentDrawable : (id<CAMetalDrawable>) mMTLDrawable];
       [commandBuffer commit];
     }
-  #endif
+    #endif
+  }
+#endif
+#if defined IGRAPHICS_D3D
+  if (GetBackendMode() == EBackendMode::Direct3D)
+  {
+    auto getBackbufferSurface = [&](){
+      // Update the frame index.
+      const UINT64 currentFenceValue = fFenceValues[fBufferIndex];
+      fBufferIndex = fSwapChain->GetCurrentBackBufferIndex();
+
+      // If the last frame for this buffer index is not done, wait until it is ready.
+      if (fFence->GetCompletedValue() < fFenceValues[fBufferIndex]) {
+        GR_D3D_CALL_ERRCHECK(fFence->SetEventOnCompletion(fFenceValues[fBufferIndex], fFenceEvent));
+        WaitForSingleObjectEx(fFenceEvent, INFINITE, FALSE);
+      }
+
+      // Set the fence value for the next frame.
+      fFenceValues[fBufferIndex] = currentFenceValue + 1;
+
+      return fSurfaces[fBufferIndex];
+    };
+
+    sk_sp<SkSurface> backbuffer = getBackbufferSurface();
+    mSurface->draw(backbuffer->getCanvas(), 0.0, 0.0, nullptr);
+    backbuffer->flushAndSubmit();
+    // swap buffers
+    SkSurface* surface = fSurfaces[fBufferIndex].get();
+
+    GrFlushInfo info;
+    surface->flush(SkSurface::BackendSurfaceAccess::kPresent, info);
+    mGrContext->submit();
+
+    GR_D3D_CALL_ERRCHECK(fSwapChain->Present(1, 0));
+
+    // Schedule a Signal command in the queue.
+    GR_D3D_CALL_ERRCHECK(fQueue->Signal(fFence.get(), fFenceValues[fBufferIndex]));
   }
 #endif
 }
@@ -587,9 +850,10 @@ void IGraphicsSkia::DrawBitmap(const IBitmap& bitmap, const IRECT& dest, int src
   p.setFilterQuality(kHigh_SkFilterQuality);
   p.setAntiAlias(true);
   p.setBlendMode(SkiaBlendMode(pBlend));
+
   if (pBlend)
     p.setAlpha(Clip(static_cast<int>(pBlend->mWeight * 255), 0, 255));
-    
+ 
   SkiaDrawable* image = bitmap.GetAPIBitmap()->GetBitmap();
 
   double scale1 = 1.0 / (bitmap.GetScale() * bitmap.GetDrawScale());
@@ -940,9 +1204,10 @@ APIBitmap* IGraphicsSkia::CreateAPIBitmap(int width, int height, int scale, doub
 {
   sk_sp<SkSurface> surface;
   
-  if (GetBackendMode() == EBackendMode::Software)
+  if (GetBackendMode() != EBackendMode::Software)
   {
     SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
+
     if (cacheable)
     {
       surface = SkSurface::MakeRasterN32Premul(width, height);

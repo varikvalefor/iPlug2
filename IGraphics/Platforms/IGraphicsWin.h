@@ -127,8 +127,8 @@ private:
   HDC mStartHDC = nullptr;
 #endif
 
-  void CreateGLContext(); // OpenGL context management - TODO: RAII instead ?
-  void DestroyGLContext();
+  void CreateGPUContext();
+  void DestroyGPUContext();
   void ActivateGLContext() override;
   void DeactivateGLContext() override;
 

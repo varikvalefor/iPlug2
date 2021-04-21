@@ -1007,76 +1007,89 @@ void IGraphicsWin::GetMouseLocation(float& x, float&y) const
   y = p.y / scale;
 }
 
-void IGraphicsWin::CreateGLContext()
+void IGraphicsWin::CreateGPUContext()
 {
   if (GetBackendMode() == EBackendMode::Software) return;
 
 #ifdef IGRAPHICS_GL
-  PIXELFORMATDESCRIPTOR pfd =
+  if (GetBackendMode() == EBackendMode::OpenGL)
   {
-    sizeof(PIXELFORMATDESCRIPTOR),
-    1,
-    PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER, //Flags
-    PFD_TYPE_RGBA, // The kind of framebuffer. RGBA or palette.
-    32, // Colordepth of the framebuffer.
-    0, 0, 0, 0, 0, 0,
-    0,
-    0,
-    0,
-    0, 0, 0, 0,
-    24, // Number of bits for the depthbuffer
-    8, // Number of bits for the stencilbuffer
-    0, // Number of Aux buffers in the framebuffer.
-    PFD_MAIN_PLANE,
-    0,
-    0, 0, 0
-  };
-
-  HDC dc = GetDC(mPlugWnd);
-  int fmt = ChoosePixelFormat(dc, &pfd);
-  SetPixelFormat(dc, fmt, &pfd);
-  mHGLRC = wglCreateContext(dc);
-  wglMakeCurrent(dc, mHGLRC);
-
-#ifdef IGRAPHICS_GL3
-  // On windows we can't create a 3.3 context directly, since we need the wglCreateContextAttribsARB extension.
-  // We load the extension, then re-create the context.
-  auto wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC) wglGetProcAddress("wglCreateContextAttribsARB");
-
-  if (wglCreateContextAttribsARB)
-  {
-    wglDeleteContext(mHGLRC);
-
-    const int attribList[] = {
-      WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-      WGL_CONTEXT_MINOR_VERSION_ARB, 3,
-      WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-      0
+    PIXELFORMATDESCRIPTOR pfd =
+    {
+      sizeof(PIXELFORMATDESCRIPTOR),
+      1,
+      PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER, //Flags
+      PFD_TYPE_RGBA, // The kind of framebuffer. RGBA or palette.
+      32, // Colordepth of the framebuffer.
+      0, 0, 0, 0, 0, 0,
+      0,
+      0,
+      0,
+      0, 0, 0, 0,
+      24, // Number of bits for the depthbuffer
+      8, // Number of bits for the stencilbuffer
+      0, // Number of Aux buffers in the framebuffer.
+      PFD_MAIN_PLANE,
+      0,
+      0, 0, 0
     };
 
-    mHGLRC = wglCreateContextAttribsARB(dc, 0, attribList);
+    HDC dc = GetDC(mPlugWnd);
+    int fmt = ChoosePixelFormat(dc, &pfd);
+    SetPixelFormat(dc, fmt, &pfd);
+    mHGLRC = wglCreateContext(dc);
     wglMakeCurrent(dc, mHGLRC);
+
+#ifdef IGRAPHICS_GL3
+    // On windows we can't create a 3.3 context directly, since we need the wglCreateContextAttribsARB extension.
+    // We load the extension, then re-create the context.
+    auto wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
+
+    if (wglCreateContextAttribsARB)
+    {
+      wglDeleteContext(mHGLRC);
+
+      const int attribList[] = {
+        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+        WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+        0
+      };
+
+      mHGLRC = wglCreateContextAttribsARB(dc, 0, attribList);
+      wglMakeCurrent(dc, mHGLRC);
+    }
+
+#endif // IGRAPHICS_GL3
+
+    //TODO: return false if GL init fails?
+    if (!gladLoadGL())
+      DBGMSG("Error initializing glad");
+
+    glGetError();
+
+    ReleaseDC(mPlugWnd, dc);
   }
+#endif //IGRAPHICS_GL
 
-#endif
-
-  //TODO: return false if GL init fails?
-  if (!gladLoadGL())
-    DBGMSG("Error initializing glad");
-
-  glGetError();
-
-  ReleaseDC(mPlugWnd, dc);
-#endif
+//#ifdef IGRAPHICS_D3D
+  //if (GetBackendMode() == EBackendMode::Direct3D)
+  //{
+  
+  //}
+//#endif
 }
 
-void IGraphicsWin::DestroyGLContext()
+void IGraphicsWin::DestroyGPUContext()
 {
   if (GetBackendMode() == EBackendMode::Software) return;
 
 #ifdef IGRAPHICS_GL
-  wglMakeCurrent(NULL, NULL);
-  wglDeleteContext(mHGLRC);
+  if (GetBackendMode() == EBackendMode::OpenGL)
+  {
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(mHGLRC);
+  }
 #endif
 }
 
@@ -1144,7 +1157,7 @@ void* IGraphicsWin::OpenWindow(void* pParent)
   SetPlatformContext(dc);
   ReleaseDC(mPlugWnd, dc);
 
-  CreateGLContext();
+  CreateGPUContext();
   OnViewInitialized((void*) dc);
 
   SetScreenScale(screenScale); // resizes draw context
@@ -1277,7 +1290,7 @@ void IGraphicsWin::CloseWindow()
     ActivateGLContext();
     OnViewDestroyed();
     DeactivateGLContext();
-    DestroyGLContext();
+    DestroyGPUContext();
 
     SetPlatformContext(nullptr);
 

@@ -12,6 +12,11 @@
 #define SK_GL
 #endif
 
+#if defined IGRAPHICS_D3D
+#define SK_DIRECT3D
+#include "include/gpu/d3d/GrD3DBackendContext.h"
+#endif
+
 #pragma warning( push )
 #pragma warning( disable : 4244 )
 #include "SkSurface.h"
@@ -20,6 +25,7 @@
 #include "SkImage.h"
 #include "GrDirectContext.h"
 #pragma warning( pop )
+
 
 BEGIN_IPLUG_NAMESPACE
 BEGIN_IGRAPHICS_NAMESPACE
@@ -153,7 +159,7 @@ private:
   WDL_TypedBuf<uint8_t> mSurfaceMemory;
 #endif
   
-#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
+#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL || defined IGRAPHICS_D3D
   sk_sp<GrDirectContext> mGrContext;
   sk_sp<SkSurface> mScreenSurface;
 #endif
@@ -163,6 +169,24 @@ private:
   void* mMTLCommandQueue;
   void* mMTLDrawable;
   void* mMTLLayer;
+#endif
+
+#ifdef IGRAPHICS_D3D
+  static constexpr int kNumFrames = 2;
+
+  gr_cp<ID3D12Device> fDevice;
+  gr_cp<ID3D12CommandQueue> fQueue;
+  gr_cp<IDXGISwapChain3> fSwapChain;
+  gr_cp<ID3D12Resource> fBuffers[kNumFrames];
+  sk_sp<SkSurface> fSurfaces[kNumFrames];
+  int fSampleCount;
+  int fStencilBits;
+
+  // Synchronization objects.
+  unsigned int fBufferIndex;
+  HANDLE fFenceEvent;
+  gr_cp<ID3D12Fence> fFence;
+  uint64_t fFenceValues[kNumFrames];
 #endif
 
   static StaticStorage<Font> sFontCache;
