@@ -78,6 +78,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
 #ifndef _DEBUG
     HMENU menu = GetMenu(gHWND);
     RemoveMenu(menu, 1, MF_BYPOSITION);
+    RemoveMenu(menu, 1, MF_BYPOSITION);
     DrawMenuBar(gHWND);
 #endif
 
@@ -228,18 +229,22 @@ INT_PTR SWELLAppMain(int msg, INT_PTR parm1, INT_PTR parm2)
 #ifndef _DEBUG
       if (menu)
       {
-        HMENU sm = GetSubMenu(menu, 1);
-        DeleteMenu(sm, ID_LIVE_EDIT, MF_BYCOMMAND);
-        DeleteMenu(sm, ID_SHOW_DRAWN, MF_BYCOMMAND);
-        DeleteMenu(sm, ID_SHOW_FPS, MF_BYCOMMAND);
+        for (auto menu : { 0, 1 })
+        {
+          HMENU sm = GetSubMenu(menu, 1);
+          DeleteMenu(sm, ID_LIVE_EDIT, MF_BYCOMMAND);
+          DeleteMenu(sm, ID_SHOW_DRAWN, MF_BYCOMMAND);
+          DeleteMenu(sm, ID_SHOW_BOUNDS, MF_BYCOMMAND);
+          DeleteMenu(sm, ID_SHOW_FPS, MF_BYCOMMAND);
 
-        // remove any trailing separators
-        int a = GetMenuItemCount(sm);
+          // remove any trailing separators
+          int a = GetMenuItemCount(sm);
 
-        while (a > 0 && GetMenuItemID(sm, a-1) == 0)
-          DeleteMenu(sm, --a, MF_BYPOSITION);
+          while (a > 0 && GetMenuItemID(sm, a - 1) == 0)
+            DeleteMenu(sm, --a, MF_BYPOSITION);
 
-        DeleteMenu(menu, 1, MF_BYPOSITION); // delete debug menu
+          DeleteMenu(menu, 1, MF_BYPOSITION); // delete renderer and debug menu
+        }
       }
 #else
       SetMenuItemModifier(menu, ID_LIVE_EDIT, MF_BYCOMMAND, 'E', FCONTROL);
