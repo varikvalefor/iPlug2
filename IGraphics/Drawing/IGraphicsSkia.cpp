@@ -524,61 +524,59 @@ void IGraphicsSkia::DrawResize()
   auto w = static_cast<int>(std::ceil(static_cast<float>(WindowWidth()) * GetScreenScale()));
   auto h = static_cast<int>(std::ceil(static_cast<float>(WindowHeight()) * GetScreenScale()));
 
-  if (mGrContext.get())
-  {
 #if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-    if (GetBackendMode() > EBackendMode::Software)
-    {
-      SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
-      mSurface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
-    }
+  if (mGrContext.get() && GetBackendMode() > EBackendMode::Software)
+  {
+    SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
+    mSurface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
+  }
 #endif
 
 #if defined IGRAPHICS_D3D
-    if (GetBackendMode() == EBackendMode::Direct3D)
+  if (mGrContext.get() && GetBackendMode() == EBackendMode::Direct3D)
+  {
+    // Clean up any outstanding resources in command lists
+    mGrContext->flush({});
+    mGrContext->submit(true);
+
+    // release the previous surface and backbuffer resources
+    for (int i = 0; i < kNumBuffers; ++i)
     {
-      // Clean up any outstanding resources in command lists
-      mGrContext->flush({});
-      mGrContext->submit(true);
-
-      // release the previous surface and backbuffer resources
-      for (int i = 0; i < kNumBuffers; ++i)
+      // Let present complete
+      if (mFence->GetCompletedValue() < mFenceValues[i])
       {
-        // Let present complete
-        if (mFence->GetCompletedValue() < mFenceValues[i])
-        {
-          GR_D3D_CALL_ERRCHECK(mFence->SetEventOnCompletion(mFenceValues[i], mFenceEvent));
-          WaitForSingleObjectEx(mFenceEvent, INFINITE, FALSE);
-        }
-        mSurfaces[i].reset(nullptr);
-        mBuffers[i].reset(nullptr);
+        GR_D3D_CALL_ERRCHECK(mFence->SetEventOnCompletion(mFenceValues[i], mFenceEvent));
+        WaitForSingleObjectEx(mFenceEvent, INFINITE, FALSE);
       }
-
-      GR_D3D_CALL_ERRCHECK(mSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
-
-      // set up base resource info
-      GrD3DTextureResourceInfo info(nullptr, nullptr, D3D12_RESOURCE_STATE_PRESENT, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 1, 0);
-
-      for (int i = 0; i < kNumBuffers; ++i)
-      {
-        GR_D3D_CALL_ERRCHECK(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mBuffers[i])));
-
-        SkASSERT(mBuffers[i]->GetDesc().Width == (UINT64)w && mBuffers[i]->GetDesc().Height == (UINT64)h);
-
-        SkSurfaceProps props{ 0, kRGB_H_SkPixelGeometry };
-
-        info.fResource = mBuffers[i];
-
-        GrBackendRenderTarget backendRT(w, h, info);
-        mSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, &props);
-      }
+      mSurfaces[i].reset(nullptr);
+      mBuffers[i].reset(nullptr);
     }
-#endif // IGRAPHICS_D3D
-  }
 
+    GR_D3D_CALL_ERRCHECK(mSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
+
+    // set up base resource info
+    GrD3DTextureResourceInfo info(nullptr, nullptr, D3D12_RESOURCE_STATE_PRESENT, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 1, 0);
+
+    for (int i = 0; i < kNumBuffers; ++i)
+    {
+      GR_D3D_CALL_ERRCHECK(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mBuffers[i])));
+
+      SkASSERT(mBuffers[i]->GetDesc().Width == (UINT64)w && mBuffers[i]->GetDesc().Height == (UINT64)h);
+
+      SkSurfaceProps props{ 0, kRGB_H_SkPixelGeometry };
+
+      info.fResource = mBuffers[i];
+
+      GrBackendRenderTarget backendRT(w, h, info);
+      mSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, &props);
+    }
+  }
+#endif // IGRAPHICS_D3D
+
+#if defined IGRAPHICS_CPU
   if (GetBackendMode() == EBackendMode::Software)
   {
-#if defined OS_WIN && defined IGRAPHICS_CPU
+#if defined OS_WIN
     mSurface.reset();
 
     const size_t bmpSize = sizeof(BITMAPINFOHEADER) + (w * h * sizeof(uint32_t));
@@ -599,7 +597,8 @@ void IGraphicsSkia::DrawResize()
     mSurface = SkSurface::MakeRasterN32Premul(w, h);
 #endif
   }
-
+#endif // IGRAPHICS_CPU
+  
   if (mSurface)
   {
     mCanvas = mSurface->getCanvas();
@@ -1190,7 +1189,15 @@ APIBitmap* IGraphicsSkia::CreateAPIBitmap(int width, int height, int scale, doub
 {
   sk_sp<SkSurface> surface;
   
-  if (GetBackendMode() != EBackendMode::Software)
+#if defined IGRAPHICS_CPU
+  if (GetBackendMode() == EBackendMode::Software)
+  {
+    surface = SkSurface::MakeRasterN32Premul(width, height);
+  }
+#endif
+  
+#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
+  if (GetBackendMode() > EBackendMode::Software)
   {
     SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
 
@@ -1203,11 +1210,8 @@ APIBitmap* IGraphicsSkia::CreateAPIBitmap(int width, int height, int scale, doub
       surface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
     }
   }
-  else
-  {
-    surface = SkSurface::MakeRasterN32Premul(width, height);
-  }
-
+#endif
+  
   surface->getCanvas()->save();
 
   return new Bitmap(std::move(surface), width, height, scale, drawScale);
