@@ -251,8 +251,25 @@ INT_PTR SWELLAppMain(int msg, INT_PTR parm1, INT_PTR parm2)
       SetMenuItemModifier(menu, ID_SHOW_DRAWN, MF_BYCOMMAND, 'D', FCONTROL);
       SetMenuItemModifier(menu, ID_SHOW_BOUNDS, MF_BYCOMMAND, 'B', FCONTROL);
       SetMenuItemModifier(menu, ID_SHOW_FPS, MF_BYCOMMAND, 'F', FCONTROL);
+      EnableMenuItem(menu, ID_RENDERER_SOFTWARE, MF_BYCOMMAND | MF_GRAYED);
+      EnableMenuItem(menu, ID_RENDERER_OPENGL,   MF_BYCOMMAND | MF_GRAYED);
+      EnableMenuItem(menu, ID_RENDERER_METAL,    MF_BYCOMMAND | MF_GRAYED);
+      EnableMenuItem(menu, ID_RENDERER_DIRECT3D, MF_BYCOMMAND | MF_GRAYED);
+#if defined IGRAPHICS_SKIA && defined IGRAPHICS_CPU
+      EnableMenuItem(menu, ID_RENDERER_SOFTWARE, MF_BYCOMMAND | MF_ENABLED);
 #endif
-
+#if defined IGRAPHICS_SKIA && defined IGRAPHICS_D3D
+      EnableMenuItem(menu, ID_RENDERER_DIRECT3D, MF_BYCOMMAND | MF_ENABLED);
+#endif
+#if defined IGRAPHICS_METAL
+      EnableMenuItem(menu, ID_RENDERER_METAL, MF_BYCOMMAND | MF_ENABLED);
+#endif
+#if defined IGRAPHICS_GL
+      EnableMenuItem(menu, ID_RENDERER_OPENGL, MF_BYCOMMAND | MF_ENABLED);
+#endif
+      
+#endif
+      
       HWND hwnd = CreateDialog(gHINST, MAKEINTRESOURCE(IDD_DIALOG_MAIN), NULL, IPlugAPPHost::MainDlgProc);
 
       if (menu)

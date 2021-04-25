@@ -543,7 +543,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
   IPlugAPPHost* pAppHost = IPlugAPPHost::sInstance.get();
 
 #if defined _DEBUG && !defined NO_IGRAPHICS
-  auto ifIGraphicsUIExists = [&](const std::function<void(IGraphics* pGraphics)>& func) {
+  auto IfIGraphicsUIExists = [&](const std::function<void(IGraphics* pGraphics)>& func) {
     IGEditorDelegate* pPlug = dynamic_cast<IGEditorDelegate*>(pAppHost->GetPlug());
 
     if (pPlug)
@@ -556,6 +556,14 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
       }
     }
   };
+  
+  auto CheckRendererMenu = [&](IGraphics* pGraphics){
+    auto mode = pGraphics->GetBackendMode();
+    CheckMenuItem(GET_MENU(), ID_RENDERER_SOFTWARE, MF_BYCOMMAND | (mode == EBackendMode::Software ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(GET_MENU(), ID_RENDERER_OPENGL,   MF_BYCOMMAND | (mode == EBackendMode::OpenGL   ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(GET_MENU(), ID_RENDERER_METAL,    MF_BYCOMMAND | (mode == EBackendMode::Metal    ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(GET_MENU(), ID_RENDERER_DIRECT3D, MF_BYCOMMAND | (mode == EBackendMode::Direct3D ? MF_CHECKED : MF_UNCHECKED));
+  };
 #endif
 
 
@@ -564,6 +572,15 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
 
   switch (uMsg)
   {
+    case WM_INITMENUPOPUP:
+    {
+#if defined _DEBUG && !defined NO_IGRAPHICS
+      IfIGraphicsUIExists([&](IGraphics* pGraphics){
+        CheckRendererMenu(pGraphics);
+      });
+#endif
+      return 0;
+    }
     case WM_INITDIALOG:
     {
       gHWND = hwndDlg;
@@ -642,74 +659,74 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
 #if defined _DEBUG && !defined NO_IGRAPHICS
         case ID_LIVE_EDIT:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics){
-            bool enabled = pGraphics->LiveEditEnabled();
-            pGraphics->EnableLiveEdit(!enabled);
-            CheckMenuItem(GET_MENU(), ID_LIVE_EDIT, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
+          IfIGraphicsUIExists([&](IGraphics* pGraphics){
+            bool enabled = !pGraphics->LiveEditEnabled();
+            pGraphics->EnableLiveEdit(enabled);
+            CheckMenuItem(GET_MENU(), ID_LIVE_EDIT, enabled ? MF_CHECKED : MF_UNCHECKED);
           });
           
           return 0;
         }
         case ID_SHOW_DRAWN:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
-            bool enabled = pGraphics->ShowAreaDrawnEnabled();
-            pGraphics->ShowAreaDrawn(!enabled);
-            CheckMenuItem(GET_MENU(), ID_SHOW_DRAWN, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
+            bool enabled = !pGraphics->ShowAreaDrawnEnabled();
+            pGraphics->ShowAreaDrawn(enabled);
+            CheckMenuItem(GET_MENU(), ID_SHOW_DRAWN, enabled ? MF_CHECKED : MF_UNCHECKED);
           });
           
           return 0;
         }
         case ID_SHOW_BOUNDS:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
-            bool enabled = pGraphics->ShowControlBoundsEnabled();
-            pGraphics->ShowControlBounds(!enabled);
-            CheckMenuItem(GET_MENU(), ID_SHOW_BOUNDS, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
+            bool enabled = !pGraphics->ShowControlBoundsEnabled();
+            pGraphics->ShowControlBounds(enabled);
+            CheckMenuItem(GET_MENU(), ID_SHOW_BOUNDS, enabled ? MF_CHECKED : MF_UNCHECKED);
           });
 
           return 0;
         }
         case ID_SHOW_FPS:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
-            bool enabled = pGraphics->ShowingFPSDisplay();
-            pGraphics->ShowFPSDisplay(!enabled);
-            CheckMenuItem(GET_MENU(), ID_SHOW_FPS, (MF_BYCOMMAND | enabled) ? MF_UNCHECKED : MF_CHECKED);
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
+            bool enabled = !pGraphics->ShowingFPSDisplay();
+            pGraphics->ShowFPSDisplay(enabled);
+            CheckMenuItem(GET_MENU(), ID_SHOW_FPS, enabled ? MF_CHECKED : MF_UNCHECKED);
           });
 
           return 0;
         }
         case ID_RENDERER_SOFTWARE:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
             pGraphics->GetDelegate()->SetBackendMode(EBackendMode::Software);
-            CheckMenuRadioItem(GET_MENU(), ID_RENDERER_SOFTWARE, ID_RENDERER_DIRECT3D, ID_RENDERER_SOFTWARE, MF_BYCOMMAND);
+            CheckRendererMenu(pGraphics);
           });
           return 0;
         }
         case ID_RENDERER_OPENGL:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
             pGraphics->GetDelegate()->SetBackendMode(EBackendMode::OpenGL);
-            CheckMenuRadioItem(GET_MENU(), ID_RENDERER_SOFTWARE, ID_RENDERER_DIRECT3D, ID_RENDERER_OPENGL, MF_BYCOMMAND);
-            });
+            CheckRendererMenu(pGraphics);
+          });
           return 0;
         }
         case ID_RENDERER_METAL:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
             pGraphics->GetDelegate()->SetBackendMode(EBackendMode::Metal);
-            CheckMenuRadioItem(GET_MENU(), ID_RENDERER_SOFTWARE, ID_RENDERER_DIRECT3D, ID_RENDERER_METAL, MF_BYCOMMAND);
-            });
+            CheckRendererMenu(pGraphics);
+          });
           return 0;
         }
         case ID_RENDERER_DIRECT3D:
         {
-          ifIGraphicsUIExists([&](IGraphics* pGraphics) {
+          IfIGraphicsUIExists([&](IGraphics* pGraphics) {
             pGraphics->GetDelegate()->SetBackendMode(EBackendMode::Direct3D);
-            CheckMenuRadioItem(GET_MENU(), ID_RENDERER_SOFTWARE, ID_RENDERER_DIRECT3D, ID_RENDERER_DIRECT3D, MF_BYCOMMAND);
-            });
+            CheckRendererMenu(pGraphics);
+          });
           return 0;
         }
 #endif
@@ -762,7 +779,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
       ptDiff.y = (rcWindow.bottom - rcWindow.top) - rcClient.bottom;
 
 #ifndef NO_IGRAPHICS
-      ifIGraphicsUIExists([&](IGraphics* pGraphics) {
+      IfIGraphicsUIExists([&](IGraphics* pGraphics) {
         pGraphics->SetScreenScale(scale);
        });
 #endif
