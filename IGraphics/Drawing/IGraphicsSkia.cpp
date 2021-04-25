@@ -37,15 +37,15 @@
   #pragma comment(lib, "svg.lib")
   #pragma comment(lib, "skshaper.lib")
 
-//#if defined IGRAPHICS_GL
+  // if the skia static lib is built with SK_GL and SK_DIRECT3D defined,
+  // we need to link these .libs, even though we might not define IGRAPHICS_GL or IGRAPHICS_D3D
   #pragma comment(lib, "opengl32.lib")
-//#endif
+  #pragma comment(lib, "d3d12.lib")
+  #pragma comment(lib, "d3dcompiler.lib")
 
 #if defined IGRAPHICS_D3D
-  #pragma comment(lib, "d3dcompiler.lib")
-  #pragma comment(lib, "d3d12.lib")
-  #pragma comment(lib, "dxgi.lib")
 
+  #pragma comment(lib, "dxgi.lib")
   #include "include/gpu/d3d/GrD3DBackendContext.h"
 
   #include <d3d12sdklayers.h>

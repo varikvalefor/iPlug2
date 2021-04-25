@@ -65,6 +65,8 @@ enum class EBackendMode
   Direct3D
 };
 
+static constexpr EBackendMode DEFAULT_BACKEND_MODE = EBackendMode::Software;
+
 /** @enum EBlend Porter-Duff blend mode/compositing operators */
 enum class EBlend
 {

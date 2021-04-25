@@ -100,7 +100,7 @@ protected:
   std::function<void(IGraphics* pGraphics)> mLayoutFunc = nullptr;
 private:
   void* mParentWindowHandle = nullptr;
-  EBackendMode mBackendMode = EBackendMode::Software;
+  EBackendMode mBackendMode = DEFAULT_BACKEND_MODE;
   std::unique_ptr<IGraphics> mGraphics;
   int mLastWidth = 0;
   int mLastHeight = 0;

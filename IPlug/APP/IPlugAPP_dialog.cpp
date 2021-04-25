@@ -542,7 +542,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
 {
   IPlugAPPHost* pAppHost = IPlugAPPHost::sInstance.get();
 
-#if defined _DEBUG && !defined NO_IGRAPHICS
+#if !defined NO_IGRAPHICS
   auto IfIGraphicsUIExists = [&](const std::function<void(IGraphics* pGraphics)>& func) {
     IGEditorDelegate* pPlug = dynamic_cast<IGEditorDelegate*>(pAppHost->GetPlug());
 
@@ -557,7 +557,7 @@ WDL_DLGRET IPlugAPPHost::MainDlgProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
     }
   };
   
-  auto CheckRendererMenu = [&](IGraphics* pGraphics){
+  auto CheckRendererMenu = [&](IGraphics* pGraphics) {
     auto mode = pGraphics->GetBackendMode();
     CheckMenuItem(GET_MENU(), ID_RENDERER_SOFTWARE, MF_BYCOMMAND | (mode == EBackendMode::Software ? MF_CHECKED : MF_UNCHECKED));
     CheckMenuItem(GET_MENU(), ID_RENDERER_OPENGL,   MF_BYCOMMAND | (mode == EBackendMode::OpenGL   ? MF_CHECKED : MF_UNCHECKED));
