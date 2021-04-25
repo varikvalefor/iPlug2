@@ -1095,8 +1095,6 @@ void IGraphicsWin::DestroyGPUContext()
 
 void IGraphicsWin::ActivateGLContext()
 {
-  if (GetBackendMode() == EBackendMode::Software) return;
-
 #ifdef IGRAPHICS_GL
   mStartHDC = wglGetCurrentDC();
   mStartHGLRC = wglGetCurrentContext();
@@ -1107,8 +1105,6 @@ void IGraphicsWin::ActivateGLContext()
 
 void IGraphicsWin::DeactivateGLContext()
 {
-  if (GetBackendMode() == EBackendMode::Software) return;
-
 #ifdef IGRAPHICS_GL
   ReleaseDC(mPlugWnd, (HDC) GetPlatformContext());
   wglMakeCurrent(mStartHDC, mStartHGLRC); // return current ctxt to start

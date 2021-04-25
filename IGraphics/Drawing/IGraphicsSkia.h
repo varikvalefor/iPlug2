@@ -172,21 +172,19 @@ private:
 #endif
 
 #ifdef IGRAPHICS_D3D
-  static constexpr int kNumFrames = 2;
+  static constexpr int kNumBuffers = 2;
 
-  gr_cp<ID3D12Device> fDevice;
-  gr_cp<ID3D12CommandQueue> fQueue;
-  gr_cp<IDXGISwapChain3> fSwapChain;
-  gr_cp<ID3D12Resource> fBuffers[kNumFrames];
-  sk_sp<SkSurface> fSurfaces[kNumFrames];
-  int fSampleCount;
-  int fStencilBits;
+  gr_cp<ID3D12Device> mDevice;
+  gr_cp<ID3D12CommandQueue> mQueue;
+  gr_cp<IDXGISwapChain3> mSwapChain;
+  gr_cp<ID3D12Resource> mBuffers[kNumBuffers];
+  sk_sp<SkSurface> mSurfaces[kNumBuffers];
 
   // Synchronization objects.
-  unsigned int fBufferIndex;
-  HANDLE fFenceEvent;
-  gr_cp<ID3D12Fence> fFence;
-  uint64_t fFenceValues[kNumFrames];
+  unsigned int mBufferIndex = 0;
+  HANDLE mFenceEvent;
+  gr_cp<ID3D12Fence> mFence;
+  uint64_t mFenceValues[kNumBuffers];
 #endif
 
   static StaticStorage<Font> sFontCache;

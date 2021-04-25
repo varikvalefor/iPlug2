@@ -431,14 +431,14 @@ void IGraphicsSkia::OnViewInitialized(void* pContext)
   {
     GrD3DBackendContext backendContext;
     CreateD3DBackendContext(&backendContext);
-    fDevice = backendContext.fDevice;
-    fQueue = backendContext.fQueue;
+    mDevice = backendContext.fDevice;
+    mQueue = backendContext.fQueue;
 
     mGrContext = GrDirectContext::MakeDirect3D(backendContext);
 
     // Make the swapchain
     UINT dxgiFactoryFlags = 0;
-    SkDEBUGCODE(dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;)
+    SkDEBUGCODE(dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG);
 
     gr_cp<IDXGIFactory4> factory;
     GR_D3D_CALL_ERRCHECK(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)));
@@ -446,7 +446,7 @@ void IGraphicsSkia::OnViewInitialized(void* pContext)
     auto w = static_cast<int>(std::ceil(static_cast<float>(WindowWidth()) * GetScreenScale()));
     auto h = static_cast<int>(std::ceil(static_cast<float>(WindowHeight()) * GetScreenScale()));
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-    swapChainDesc.BufferCount = kNumFrames;
+    swapChainDesc.BufferCount = kNumBuffers;
     swapChainDesc.Width = w;
     swapChainDesc.Height = h;
     swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -456,25 +456,24 @@ void IGraphicsSkia::OnViewInitialized(void* pContext)
 
     HWND hWnd = (HWND) GetWindow();
     gr_cp<IDXGISwapChain1> swapChain;
-    GR_D3D_CALL_ERRCHECK(factory->CreateSwapChainForHwnd(fQueue.get(), hWnd, &swapChainDesc, nullptr, nullptr, &swapChain));
+    GR_D3D_CALL_ERRCHECK(factory->CreateSwapChainForHwnd(mQueue.get(), hWnd, &swapChainDesc, nullptr, nullptr, &swapChain));
 
     // We don't support fullscreen transitions.
     GR_D3D_CALL_ERRCHECK(factory->MakeWindowAssociation(hWnd, DXGI_MWA_NO_ALT_ENTER));
 
-    GR_D3D_CALL_ERRCHECK(swapChain->QueryInterface(IID_PPV_ARGS(&fSwapChain)));
+    GR_D3D_CALL_ERRCHECK(swapChain->QueryInterface(IID_PPV_ARGS(&mSwapChain)));
 
-    fBufferIndex = fSwapChain->GetCurrentBackBufferIndex();
+    mBufferIndex = mSwapChain->GetCurrentBackBufferIndex();
 
-    fSampleCount = 1;
-
-    for (int i = 0; i < kNumFrames; ++i) {
-      fFenceValues[i] = 10000;   // use a high value to make it easier to track these in PIX
+    for (int i = 0; i < kNumBuffers; ++i)
+    {
+      mFenceValues[i] = 10000;   // use a high value to make it easier to track these in PIX
     }
-    GR_D3D_CALL_ERRCHECK(fDevice->CreateFence(fFenceValues[fBufferIndex], D3D12_FENCE_FLAG_NONE,
-      IID_PPV_ARGS(&fFence)));
 
-    fFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    SkASSERT(fFenceEvent);
+    GR_D3D_CALL_ERRCHECK(mDevice->CreateFence(mFenceValues[mBufferIndex], D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&mFence)));
+
+    mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    SkASSERT(mFenceEvent);
   }
 #endif
 
@@ -504,17 +503,18 @@ void IGraphicsSkia::OnViewDestroyed()
 #if defined IGRAPHICS_D3D
   if (GetBackendMode() == EBackendMode::Direct3D)
   {
-    CloseHandle(fFenceEvent);
-    fFence.reset(nullptr);
+    CloseHandle(mFenceEvent);
+    mFence.reset(nullptr);
 
-    for (int i = 0; i < kNumFrames; ++i) {
-      fSurfaces[i].reset(nullptr);
-      fBuffers[i].reset(nullptr);
+    for (int i = 0; i < kNumBuffers; ++i)
+    {
+      mSurfaces[i].reset(nullptr);
+      mBuffers[i].reset(nullptr);
     }
 
-    fSwapChain.reset(nullptr);
-    fQueue.reset(nullptr);
-    fDevice.reset(nullptr);
+    mSwapChain.reset(nullptr);
+    mQueue.reset(nullptr);
+    mDevice.reset(nullptr);
   }
 #endif
 }
@@ -542,42 +542,35 @@ void IGraphicsSkia::DrawResize()
       mGrContext->submit(true);
 
       // release the previous surface and backbuffer resources
-      for (int i = 0; i < kNumFrames; ++i) {
+      for (int i = 0; i < kNumBuffers; ++i)
+      {
         // Let present complete
-        if (fFence->GetCompletedValue() < fFenceValues[i]) {
-          GR_D3D_CALL_ERRCHECK(fFence->SetEventOnCompletion(fFenceValues[i], fFenceEvent));
-          WaitForSingleObjectEx(fFenceEvent, INFINITE, FALSE);
+        if (mFence->GetCompletedValue() < mFenceValues[i])
+        {
+          GR_D3D_CALL_ERRCHECK(mFence->SetEventOnCompletion(mFenceValues[i], mFenceEvent));
+          WaitForSingleObjectEx(mFenceEvent, INFINITE, FALSE);
         }
-        fSurfaces[i].reset(nullptr);
-        fBuffers[i].reset(nullptr);
+        mSurfaces[i].reset(nullptr);
+        mBuffers[i].reset(nullptr);
       }
 
-      GR_D3D_CALL_ERRCHECK(fSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
+      GR_D3D_CALL_ERRCHECK(mSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
 
       // set up base resource info
       GrD3DTextureResourceInfo info(nullptr, nullptr, D3D12_RESOURCE_STATE_PRESENT, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 1, 0);
 
-      for (int i = 0; i < kNumFrames; ++i)
+      for (int i = 0; i < kNumBuffers; ++i)
       {
-        GR_D3D_CALL_ERRCHECK(fSwapChain->GetBuffer(i, IID_PPV_ARGS(&fBuffers[i])));
+        GR_D3D_CALL_ERRCHECK(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mBuffers[i])));
 
-        SkASSERT(fBuffers[i]->GetDesc().Width == (UINT64)w && fBuffers[i]->GetDesc().Height == (UINT64)h);
+        SkASSERT(mBuffers[i]->GetDesc().Width == (UINT64)w && mBuffers[i]->GetDesc().Height == (UINT64)h);
 
         SkSurfaceProps props{ 0, kRGB_H_SkPixelGeometry };
 
-        info.fResource = fBuffers[i];
-        if (fSampleCount > 1) {
-          GrBackendTexture backendTexture(w, h, info);
-          fSurfaces[i] = SkSurface::MakeFromBackendTexture(
-            mGrContext.get(), backendTexture, kTopLeft_GrSurfaceOrigin, fSampleCount,
-            kRGBA_8888_SkColorType, nullptr, &props);
-        }
-        else {
-          GrBackendRenderTarget backendRT(w, h, info);
-          fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(
-            mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
-            nullptr, &props);
-        }
+        info.fResource = mBuffers[i];
+
+        GrBackendRenderTarget backendRT(w, h, info);
+        mSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, nullptr, &props);
       }
     }
 #endif // IGRAPHICS_D3D
@@ -800,37 +793,38 @@ void IGraphicsSkia::EndFrame()
 #if defined IGRAPHICS_D3D
   if (GetBackendMode() == EBackendMode::Direct3D)
   {
-    auto getBackbufferSurface = [&](){
+    auto getBackbufferSurface = [&]() {
       // Update the frame index.
-      const UINT64 currentFenceValue = fFenceValues[fBufferIndex];
-      fBufferIndex = fSwapChain->GetCurrentBackBufferIndex();
+      const UINT64 currentFenceValue = mFenceValues[mBufferIndex];
+      mBufferIndex = mSwapChain->GetCurrentBackBufferIndex();
 
       // If the last frame for this buffer index is not done, wait until it is ready.
-      if (fFence->GetCompletedValue() < fFenceValues[fBufferIndex]) {
-        GR_D3D_CALL_ERRCHECK(fFence->SetEventOnCompletion(fFenceValues[fBufferIndex], fFenceEvent));
-        WaitForSingleObjectEx(fFenceEvent, INFINITE, FALSE);
+      if (mFence->GetCompletedValue() < mFenceValues[mBufferIndex])
+      {
+        GR_D3D_CALL_ERRCHECK(mFence->SetEventOnCompletion(mFenceValues[mBufferIndex], mFenceEvent));
+        WaitForSingleObjectEx(mFenceEvent, INFINITE, FALSE);
       }
 
       // Set the fence value for the next frame.
-      fFenceValues[fBufferIndex] = currentFenceValue + 1;
+      mFenceValues[mBufferIndex] = currentFenceValue + 1;
 
-      return fSurfaces[fBufferIndex];
+      return mSurfaces[mBufferIndex];
     };
 
     sk_sp<SkSurface> backbuffer = getBackbufferSurface();
     mSurface->draw(backbuffer->getCanvas(), 0.0, 0.0, nullptr);
     backbuffer->flushAndSubmit();
     // swap buffers
-    SkSurface* surface = fSurfaces[fBufferIndex].get();
+    SkSurface* surface = mSurfaces[mBufferIndex].get();
 
     GrFlushInfo info;
     surface->flush(SkSurface::BackendSurfaceAccess::kPresent, info);
     mGrContext->submit();
 
-    GR_D3D_CALL_ERRCHECK(fSwapChain->Present(1, 0));
+    GR_D3D_CALL_ERRCHECK(mSwapChain->Present(1, 0));
 
     // Schedule a Signal command in the queue.
-    GR_D3D_CALL_ERRCHECK(fQueue->Signal(fFence.get(), fFenceValues[fBufferIndex]));
+    GR_D3D_CALL_ERRCHECK(mQueue->Signal(mFence.get(), mFenceValues[mBufferIndex]));
   }
 #endif
 }
