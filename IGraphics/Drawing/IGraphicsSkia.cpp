@@ -436,9 +436,7 @@ void IGraphicsSkia::OnViewInitialized(void* pContext)
 
     mGrContext = GrDirectContext::MakeDirect3D(backendContext);
 
-
     // Make the swapchain
-
     UINT dxgiFactoryFlags = 0;
     SkDEBUGCODE(dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;)
 
@@ -487,7 +485,7 @@ void IGraphicsSkia::OnViewDestroyed()
 {
   RemoveAllControls();
 
-#if defined IGRAPHICS_GL
+#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL || defined IGRAPHICS_D3D
   mSurface = nullptr;
   mScreenSurface = nullptr;
   mGrContext = nullptr;
@@ -525,71 +523,65 @@ void IGraphicsSkia::DrawResize()
 {
   auto w = static_cast<int>(std::ceil(static_cast<float>(WindowWidth()) * GetScreenScale()));
   auto h = static_cast<int>(std::ceil(static_cast<float>(WindowHeight()) * GetScreenScale()));
-  
-#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
-  if (GetBackendMode() > EBackendMode::Software)
+
+  if (mGrContext.get())
   {
-    if (mGrContext.get())
+#if defined IGRAPHICS_GL || defined IGRAPHICS_METAL
+    if (GetBackendMode() > EBackendMode::Software)
     {
       SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
       mSurface = SkSurface::MakeRenderTarget(mGrContext.get(), SkBudgeted::kYes, info);
     }
-  }
 #endif
 
 #if defined IGRAPHICS_D3D
-  if (GetBackendMode() == EBackendMode::Direct3D)
-  {
-    // Clean up any outstanding resources in command lists
-    mGrContext->flush({});
-    mGrContext->submit(true);
-
-    // release the previous surface and backbuffer resources
-    for (int i = 0; i < kNumFrames; ++i) {
-      // Let present complete
-      if (fFence->GetCompletedValue() < fFenceValues[i]) {
-        GR_D3D_CALL_ERRCHECK(fFence->SetEventOnCompletion(fFenceValues[i], fFenceEvent));
-        WaitForSingleObjectEx(fFenceEvent, INFINITE, FALSE);
-      }
-      fSurfaces[i].reset(nullptr);
-      fBuffers[i].reset(nullptr);
-    }
-
-    GR_D3D_CALL_ERRCHECK(fSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
-
-    // set up base resource info
-    GrD3DTextureResourceInfo info(nullptr,
-      nullptr,
-      D3D12_RESOURCE_STATE_PRESENT,
-      DXGI_FORMAT_R8G8B8A8_UNORM,
-      1,
-      1,
-      0);
-    for (int i = 0; i < kNumFrames; ++i)
+    if (GetBackendMode() == EBackendMode::Direct3D)
     {
-      GR_D3D_CALL_ERRCHECK(fSwapChain->GetBuffer(i, IID_PPV_ARGS(&fBuffers[i])));
+      // Clean up any outstanding resources in command lists
+      mGrContext->flush({});
+      mGrContext->submit(true);
 
-      SkASSERT(fBuffers[i]->GetDesc().Width == (UINT64)w && fBuffers[i]->GetDesc().Height == (UINT64)h);
-
-      SkSurfaceProps props{ 0, kRGB_H_SkPixelGeometry };
-
-      info.fResource = fBuffers[i];
-      if (fSampleCount > 1) {
-        GrBackendTexture backendTexture(w, h, info);
-        fSurfaces[i] = SkSurface::MakeFromBackendTexture(
-          mGrContext.get(), backendTexture, kTopLeft_GrSurfaceOrigin, fSampleCount,
-          kRGBA_8888_SkColorType, nullptr, &props);
+      // release the previous surface and backbuffer resources
+      for (int i = 0; i < kNumFrames; ++i) {
+        // Let present complete
+        if (fFence->GetCompletedValue() < fFenceValues[i]) {
+          GR_D3D_CALL_ERRCHECK(fFence->SetEventOnCompletion(fFenceValues[i], fFenceEvent));
+          WaitForSingleObjectEx(fFenceEvent, INFINITE, FALSE);
+        }
+        fSurfaces[i].reset(nullptr);
+        fBuffers[i].reset(nullptr);
       }
-      else {
-        GrBackendRenderTarget backendRT(w, h, info);
-        fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(
-          mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
-          nullptr, &props);
+
+      GR_D3D_CALL_ERRCHECK(fSwapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
+
+      // set up base resource info
+      GrD3DTextureResourceInfo info(nullptr, nullptr, D3D12_RESOURCE_STATE_PRESENT, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 1, 0);
+
+      for (int i = 0; i < kNumFrames; ++i)
+      {
+        GR_D3D_CALL_ERRCHECK(fSwapChain->GetBuffer(i, IID_PPV_ARGS(&fBuffers[i])));
+
+        SkASSERT(fBuffers[i]->GetDesc().Width == (UINT64)w && fBuffers[i]->GetDesc().Height == (UINT64)h);
+
+        SkSurfaceProps props{ 0, kRGB_H_SkPixelGeometry };
+
+        info.fResource = fBuffers[i];
+        if (fSampleCount > 1) {
+          GrBackendTexture backendTexture(w, h, info);
+          fSurfaces[i] = SkSurface::MakeFromBackendTexture(
+            mGrContext.get(), backendTexture, kTopLeft_GrSurfaceOrigin, fSampleCount,
+            kRGBA_8888_SkColorType, nullptr, &props);
+        }
+        else {
+          GrBackendRenderTarget backendRT(w, h, info);
+          fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(
+            mGrContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType,
+            nullptr, &props);
+        }
       }
     }
+#endif // IGRAPHICS_D3D
   }
-
-#endif
 
   if (GetBackendMode() == EBackendMode::Software)
   {
