@@ -75,8 +75,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdPa
 
     CreateDialog(gHINSTANCE, MAKEINTRESOURCE(IDD_DIALOG_MAIN), GetDesktopWindow(), IPlugAPPHost::MainDlgProc);
 
-#ifndef _DEBUG
     HMENU menu = GetMenu(gHWND);
+
+#ifdef _DEBUG
+#if defined IGRAPHICS_SKIA && defined IGRAPHICS_CPU
+    EnableMenuItem(menu, ID_RENDERER_SOFTWARE, MF_BYCOMMAND | MF_ENABLED);
+#endif
+#if defined IGRAPHICS_SKIA && defined IGRAPHICS_D3D
+    EnableMenuItem(menu, ID_RENDERER_DIRECT3D, MF_BYCOMMAND | MF_ENABLED);
+#endif
+#if defined IGRAPHICS_GL
+    EnableMenuItem(menu, ID_RENDERER_OPENGL, MF_BYCOMMAND | MF_ENABLED);
+#endif
+#else
     RemoveMenu(menu, 1, MF_BYPOSITION);
     RemoveMenu(menu, 1, MF_BYPOSITION);
     DrawMenuBar(gHWND);
